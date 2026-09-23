@@ -146,6 +146,7 @@ js/chart.js             SVG bar chart
 js/app.js               tabs, rendering, crawl scheduling
 data/*.jsonl            bundled snapshot (Power 6/55, 6/45, 5/35 and Keno)
 tools/crawl_keno.py     Keno crawler (standalone, stdlib only)
+tools/analyze_keno.py   tests the Keno history for exploitable structure
 ci/                     optional GitHub Actions workflow
 icons/                  app and Home Screen icons
 tests/run.mjs           test suite for the non-DOM modules
@@ -178,6 +179,25 @@ It is slow and rate-limits bursts, so requests are paced (`--delay`, default 2s)
 retried with backoff. By default the crawl stops once it reaches draws already in
 the file, which makes repeat runs cheap; `--full` keeps going. Progress is written
 to the file every 20 pages, so an interrupted crawl keeps what it collected.
+
+`tools/analyze_keno.py` tests that history for anything a strategy could exploit —
+number uniformity, drift, hot-number persistence, draw-to-draw correlation, whether
+overdue numbers are really due, draw shape, pair clustering and the two side bets —
+and finishes with the exact hypergeometric odds for each pick level:
+
+```
+python3 tools/analyze_keno.py
+python3 tools/analyze_keno.py --paytable prizes.json   # adds EV and house edge
+```
+
+Every test reports its verdict against a fair-draw reference, and a shuffle control
+runs the same test on synthetic random draws so you can see what "no structure"
+looks like at this sample size. Two notes on the statistics: the usual
+`sum((O-E)^2/E)` is wrong for per-number counts here, because exactly 20 of 80 balls
+are taken each draw and the counts are therefore slightly negatively correlated —
+the tool standardises by the true variance instead. And extreme numbers and pairs
+are reported with a multiple-comparison correction, since the most extreme of 80
+numbers or 3,160 pairs is expected to look striking.
 
 > Keno is **not** wired into the generator UI. The eight strategies and the whole
 > backtest are built around picking `k` numbers from a pool, which does not map onto
