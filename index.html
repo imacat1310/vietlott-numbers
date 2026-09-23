@@ -44,6 +44,7 @@
     <button role="tab" id="tab-generate" aria-controls="panel-generate" aria-selected="true">Generate</button>
     <button role="tab" id="tab-stats" aria-controls="panel-stats" aria-selected="false">Statistics</button>
     <button role="tab" id="tab-backtest" aria-controls="panel-backtest" aria-selected="false">Backtest</button>
+    <button role="tab" id="tab-keno" aria-controls="panel-keno" aria-selected="false">Keno</button>
     <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false">Data<span class="hide-narrow"> &amp; crawler</span></button>
   </div>
 
@@ -193,6 +194,77 @@
         <div class="card">
           <div class="card-head"><h2>Result</h2><span class="sub" id="bt-sub"></span></div>
           <div id="bt-result"><p class="muted">Run a backtest to see how a strategy would have done.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ KENO ============ -->
+  <section class="panel" id="panel-keno" role="tabpanel" aria-labelledby="tab-keno">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h2>Keno ticket</h2></div>
+
+        <p class="muted" style="font-size:12.5px">
+          A draw takes 20 of the 80 numbers. Play <em>k</em> numbers and the count you
+          match follows a fixed distribution, so the only choice that changes your
+          odds is how many numbers you play.
+        </p>
+
+        <label class="field">
+          <span>Numbers played <span class="hint">(k)</span></span>
+          <span class="range-row">
+            <input type="range" id="keno-k" min="1" max="10" step="1" value="4">
+            <output for="keno-k">4</output>
+          </span>
+        </label>
+
+        <label class="field">
+          <span>A win means matching at least</span>
+          <select id="keno-threshold"></select>
+        </label>
+
+        <label class="field">
+          <span>Seed <span class="hint">(blank = fresh randomness)</span></span>
+          <input type="text" id="keno-seed" placeholder="e.g. 2026">
+        </label>
+
+        <div class="btn-row">
+          <button class="btn primary" id="keno-run">Generate</button>
+          <button class="btn" id="keno-copy">Copy</button>
+        </div>
+
+        <p class="note warn" style="margin-top:14px">
+          <strong>Thresholds are yours to set.</strong> Vietlott's prize table decides
+          which match counts actually pay, and it is not in the draw data. Set the
+          threshold for each level to the real one before comparing levels.
+        </p>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Every pick level</h2>
+            <span class="sub">one ticket per level, with its exact odds</span>
+          </div>
+          <div id="keno-levels"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 id="keno-dist-title">Chance of each result</h2>
+            <span class="sub" id="keno-dist-sub"></span>
+          </div>
+          <div id="keno-dist-chart"></div>
+          <div id="keno-dist-table" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Checked against real draws</h2>
+            <span class="sub" id="keno-history-sub"></span>
+          </div>
+          <div id="keno-history"><p class="muted">Generate a ticket to score it against the recent Keno history.</p></div>
         </div>
       </div>
     </div>

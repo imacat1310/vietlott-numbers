@@ -12,6 +12,10 @@ import { STRATEGIES, STRATEGY_BY_KEY, Context } from './strategies.js';
 import { makeRng } from './rng.js';
 import { frequency, absence, topPairs, shapeSummary } from './stats.js';
 import { runBacktest, expectedRandomMatches } from './backtest.js';
+import {
+  KENO, distribution, winProbability, generateAllLevels, generateTicket,
+  defaultThreshold, defaultThresholds, scoreAgainstHistory, hyperPmf,
+} from './keno.js';
 import { barChart } from './chart.js';
 
 const $ = (id) => document.getElementById(id);
@@ -41,6 +45,13 @@ function fmtVnd(n) {
   if (abs >= 1e6) return `${(n / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M ₫`;
   if (abs >= 1e3) return `${fmtInt(n / 1e3)}k ₫`;
   return `${fmtInt(n)} ₫`;
+}
+
+/** "1 in N" odds: keep a decimal while N is small, round once it is large. */
+function fmtOneIn(x) {
+  if (!Number.isFinite(x)) return '—';
+  if (x < 20) return x.toFixed(1);
+  return fmtInt(x);
 }
 
 function fmtRelative(ts) {
@@ -607,6 +618,159 @@ function renderBacktestResults(results, isComparison) {
 }
 
 /* ------------------------------------------------------------------ *
+ * keno tab
+ * ------------------------------------------------------------------ */
+
+const keno = { thresholds: defaultThresholds(), draws: null, loading: null, levels: null };
+
+/** The trimmed history is ~0.8 MB, so fetch it only when the tab is opened. */
+async function kenoHistory() {
+  if (keno.draws) return keno.draws;
+  if (keno.loading) return keno.loading;
+  keno.loading = (async () => {
+    const res = await fetch(`./data/${KENO.file}`, { cache: 'force-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = [];
+    for (const line of (await res.text()).split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const r = JSON.parse(t);
+        if (Array.isArray(r.result) && r.result.length === KENO.drawn) rows.push(r);
+      } catch {
+        /* skip */
+      }
+    }
+    keno.draws = rows;
+    return rows;
+  })();
+  return keno.loading;
+}
+
+function kenoK() {
+  return Math.max(1, Math.min(KENO.maxPick, Number($('keno-k').value) || 1));
+}
+
+function syncKenoThreshold() {
+  const k = kenoK();
+  const current = keno.thresholds[k] ?? defaultThreshold(k);
+  const sel = $('keno-threshold');
+  sel.innerHTML = '';
+  for (let t = 1; t <= k; t++) {
+    const p = winProbability(k, t);
+    sel.innerHTML += `<option value="${t}"${t === current ? ' selected' : ''}>` +
+      `${t} of ${k} — ${(p * 100).toFixed(p < 1 ? 2 : 1)}%</option>`;
+  }
+}
+
+function renderKeno() {
+  const k = kenoK();
+  keno.thresholds[k] = Number($('keno-threshold').value) || defaultThreshold(k);
+  const seed = $('keno-seed').value.trim() || null;
+  const rng = makeRng(seed);
+
+  const levels = generateAllLevels(rng, keno.thresholds);
+  keno.levels = levels;
+
+  const best = levels.reduce((a, b) => (b.pWin > a.pWin ? b : a));
+  $('keno-levels').innerHTML = `<div class="table-wrap"><table class="data">
+    <thead><tr>
+      <th>Play</th><th>Numbers</th><th class="num">Win on</th>
+      <th class="num">P(win)</th><th class="num">1 in</th><th class="num">All k</th>
+    </tr></thead>
+    <tbody>${levels
+      .map(
+        (lv) => `<tr${lv.k === k ? ' style="background:var(--surface-2)"' : ''}>
+          <td class="mono">${lv.k}</td>
+          <td><span class="ball-row">${ballsHtml(lv.numbers, { small: true })}</span></td>
+          <td class="num">${lv.threshold}+</td>
+          <td class="num${lv === best ? ' best' : ''}">${(lv.pWin * 100).toFixed(2)}%</td>
+          <td class="num">${fmtOneIn(lv.oneIn)}</td>
+          <td class="num">1 in ${fmtOneIn(1 / lv.pAll)}</td>
+        </tr>`
+      )
+      .join('')}</tbody></table></div>
+    <p class="note"><strong>Highest chance of a win: play ${best.k}</strong>
+    at ${(best.pWin * 100).toFixed(2)}%, under the thresholds currently set.
+    Within any one row the numbers themselves make no difference — swap them for any
+    others and every figure on that row stays identical.</p>`;
+
+  const rows = distribution(k);
+  const threshold = keno.thresholds[k];
+  $('keno-dist-title').textContent = `Chance of each result when you play ${k}`;
+  $('keno-dist-sub').textContent =
+    `mean ${(k * KENO.drawn / KENO.max).toFixed(2)} matches · shaded bars count as a win`;
+  barChart(
+    $('keno-dist-chart'),
+    rows.map((r) => ({
+      label: r.m,
+      value: r.p * 100,
+      dim: r.m < threshold,
+      tip: `<b>${r.m} of ${k}</b> &middot; ${(r.p * 100).toFixed(3)}%` +
+        (r.p > 0 ? ` (1 in ${fmtOneIn(1 / r.p)})` : ''),
+    })),
+    { height: 180, valueFormat: (v) => `${v.toFixed(0)}%`, ariaLabel: 'chance of each match count' }
+  );
+
+  $('keno-dist-table').innerHTML = `<div class="table-wrap"><table class="data">
+    <thead><tr><th>Matches</th><th class="num">Chance</th><th class="num">1 in</th><th class="num">At least this many</th></tr></thead>
+    <tbody>${rows
+      .map(
+        (r) => `<tr>
+          <td class="mono">${r.m} of ${k}${r.m >= threshold ? ' ✓' : ''}</td>
+          <td class="num">${(r.p * 100).toFixed(r.p < 0.001 ? 5 : 3)}%</td>
+          <td class="num">${r.p > 0 ? fmtOneIn(1 / r.p) : '—'}</td>
+          <td class="num">${(r.atLeast * 100).toFixed(r.atLeast < 0.001 ? 5 : 3)}%</td>
+        </tr>`
+      )
+      .join('')}</tbody></table></div>`;
+
+  renderKenoHistory(levels.find((lv) => lv.k === k));
+}
+
+async function renderKenoHistory(level) {
+  const box = $('keno-history');
+  box.innerHTML = '<p class="muted"><span class="spinner"></span> loading recent draws…</p>';
+  let draws;
+  try {
+    draws = await kenoHistory();
+  } catch (e) {
+    box.innerHTML = `<p class="muted">Could not load the Keno history (${e.message}).</p>`;
+    return;
+  }
+
+  const s = scoreAgainstHistory(level.numbers, draws, level.threshold);
+  const exp = winProbability(level.k, level.threshold);
+  const se = Math.sqrt((exp * (1 - exp)) / s.draws);
+  const z = se > 0 ? (s.observedWinRate - exp) / se : 0;
+
+  $('keno-history-sub').textContent =
+    `${fmtInt(s.draws)} draws · ${draws[0].date} → ${draws[draws.length - 1].date}`;
+
+  box.innerHTML = `<div class="tiles">
+      ${tile('This ticket won', `${s.wins}×`, `out of ${fmtInt(s.draws)} draws`)}
+      ${tile('Observed rate', `${(s.observedWinRate * 100).toFixed(2)}%`, `exact odds say ${(exp * 100).toFixed(2)}%`)}
+      ${tile('Difference', `${z >= 0 ? '+' : ''}${z.toFixed(2)}σ`, Math.abs(z) < 2 ? 'as expected' : 'unusual run')}
+    </div>
+    <div class="table-wrap" style="margin-top:12px"><table class="data">
+      <thead><tr><th>Matches</th><th class="num">Happened</th><th class="num">Expected</th><th class="num">Observed</th><th class="num">Exact</th></tr></thead>
+      <tbody>${s.rows
+        .map(
+          (r) => `<tr>
+            <td class="mono">${r.m}${r.m >= level.threshold ? ' ✓' : ''}</td>
+            <td class="num">${fmtInt(r.observed)}</td>
+            <td class="num">${r.expected.toFixed(1)}</td>
+            <td class="num">${(r.observedP * 100).toFixed(2)}%</td>
+            <td class="num">${(r.expectedP * 100).toFixed(2)}%</td>
+          </tr>`
+        )
+        .join('')}</tbody></table></div>
+    <p class="note">Your ${level.k} numbers scored against every one of these draws.
+    The observed column tracking the exact column is the point: the maths above is not a
+    model of Keno, it is Keno. Nothing about which numbers you chose moves it.</p>`;
+}
+
+/* ------------------------------------------------------------------ *
  * data tab
  * ------------------------------------------------------------------ */
 
@@ -670,7 +834,12 @@ function initTabs() {
       o.setAttribute('aria-selected', String(o === tab));
       $(o.getAttribute('aria-controls')).classList.toggle('active', o === tab);
     });
+    // The product selector drives every tab except Keno, which is its own game.
+    const kenoTab = tab.id === 'tab-keno';
+    $('product').style.display = kenoTab ? 'none' : '';
+    $('data-status').style.display = kenoTab ? 'none' : '';
     if (tab.id === 'tab-stats') renderStats();
+    if (tab.id === 'tab-keno' && !keno.levels) renderKeno();
     const name = tab.id.replace('tab-', '');
     if (push && location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
   }
@@ -770,6 +939,27 @@ function initEvents() {
 
   $('bt-run').addEventListener('click', runBacktestUI);
 
+  $('keno-k').addEventListener('input', () => {
+    $('keno-k').parentElement.querySelector('output').textContent = $('keno-k').value;
+    syncKenoThreshold();
+  });
+  $('keno-k').addEventListener('change', renderKeno);
+  $('keno-threshold').addEventListener('change', renderKeno);
+  $('keno-run').addEventListener('click', renderKeno);
+  $('keno-copy').addEventListener('click', async () => {
+    if (!keno.levels) return;
+    const text = keno.levels
+      .map((lv) => `${String(lv.k).padStart(2)}: ${lv.numbers.map(pad2).join(' ')}`)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      $('keno-copy').textContent = 'Copied';
+    } catch {
+      $('keno-copy').textContent = 'Copy failed';
+    }
+    setTimeout(() => ($('keno-copy').textContent = 'Copy'), 1400);
+  });
+
   $('crawl-now').addEventListener('click', () => crawl({}));
   $('crawl-backfill').addEventListener('click', () => {
     log('deep backfill: walking up to 40 result pages…');
@@ -792,6 +982,7 @@ async function main() {
   initTabs();
   initProducts();
   initStrategySelects();
+  syncKenoThreshold();
   renderPrizeInputs();
   initEvents();
 

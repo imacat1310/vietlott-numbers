@@ -37,6 +37,13 @@ limited to a recent window and can include or exclude the bonus ball.
 each against the real result and pricing the outcome with an editable prize table.
 "Compare all strategies" runs all eight over the same draws with the same seed.
 
+**Keno** — a ticket for every pick level from 1 to 10 at once, each with its exact
+odds, so you can see which level actually maximises your chance of a win. Picking
+*k* numbers gives a match count distributed as Hypergeometric(80, 20, k), which no
+choice of numbers can alter — the tab says so plainly and shows the full
+distribution, then scores your ticket against 5,000 real draws so the theory can be
+checked rather than believed.
+
 **Data & crawler** — crawl status, manual and automatic crawling, JSONL export, and
 the stored draw history.
 
@@ -144,6 +151,7 @@ js/stats.js             frequency, absence, pairs
 js/backtest.js          backtest harness and prize accounting
 js/chart.js             SVG bar chart
 js/app.js               tabs, rendering, crawl scheduling
+js/keno.js              Keno odds, ticket generation and history scoring
 data/*.jsonl            bundled snapshot (Power 6/55, 6/45, 5/35 and Keno)
 tools/crawl_keno.py     Keno crawler (standalone, stdlib only)
 tools/analyze_keno.py   tests the Keno history for exploitable structure
@@ -199,10 +207,15 @@ the tool standardises by the true variance instead. And extreme numbers and pair
 are reported with a multiple-comparison correction, since the most extreme of 80
 numbers or 3,160 pairs is expected to look striking.
 
-> Keno is **not** wired into the generator UI. The eight strategies and the whole
-> backtest are built around picking `k` numbers from a pool, which does not map onto
-> a game that draws 20 of 80 for you. The data is here for analysis; adding a Keno
-> tab would mean new strategies and a different prize model.
+The Keno tab uses `data/keno-recent.jsonl`, a 5,000-draw tail of the same history
+(~0.8 MB) that the crawler rewrites on every run. The full 13 MB file is too heavy
+for a browser to fetch, and the tab only needs enough draws to check the odds.
+
+> The eight Power strategies are deliberately **not** offered for Keno. They pick
+> `k` numbers from a pool hoping some are luckier, and the analysis above shows the
+> Keno history gives no support for that — nor could it, since every k-number
+> combination has identical odds under a fixed prize table. The Keno tab optimises
+> the one thing that does move the odds: how many numbers you play.
 
 ## Tests
 

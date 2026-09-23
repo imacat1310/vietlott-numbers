@@ -15,6 +15,10 @@ import { STRATEGIES, STRATEGY_BY_KEY, Context } from '../js/strategies.js';
 import { makeRng, sample, weightedSample, weightedChoice } from '../js/rng.js';
 import { frequency, absence, topPairs } from '../js/stats.js';
 import { runBacktest, expectedRandomMatches } from '../js/backtest.js';
+import {
+  comb, hyperPmf, distribution, winProbability, meanMatches,
+  generateTicket, generateAllLevels, defaultThreshold, scoreAgainstHistory,
+} from '../js/keno.js';
 
 /* ---- tiny test runner ---- */
 let passed = 0;
@@ -387,6 +391,128 @@ check('bonus-ball toggle changes what gets matched', () => {
   const withoutBonus = runBacktest({ ...base, useBonus: false });
   const withBonus = runBacktest({ ...base, useBonus: true });
   assert(withBonus.avgMatches >= withoutBonus.avgMatches, 'extra ball should not lower matches');
+});
+
+/* ---- keno ---- */
+out('\nkeno maths');
+
+check('hypergeometric pmf matches the reference values', () => {
+  // Computed independently in tools/analyze_keno.py (Python, math.comb).
+  const refNone = {
+    1: 0.75, 2: 0.56013, 3: 0.4165, 4: 0.30832, 5: 0.22718,
+    6: 0.1666, 7: 0.12157, 8: 0.08827, 9: 0.06375, 10: 0.04579,
+  };
+  const refAll = {
+    1: 2.5e-1, 2: 6.013e-2, 3: 1.388e-2, 4: 3.063e-3, 5: 6.449e-4,
+    6: 1.29e-4, 7: 2.44e-5, 8: 4.346e-6, 9: 7.243e-7, 10: 1.122e-7,
+  };
+  for (let k = 1; k <= 10; k++) {
+    const none = hyperPmf(0, k);
+    const all = hyperPmf(k, k);
+    assert(Math.abs(none - refNone[k]) < 5e-5, `k=${k} P(0) ${none} vs ${refNone[k]}`);
+    assert(Math.abs(all / refAll[k] - 1) < 2e-3, `k=${k} P(all) ${all} vs ${refAll[k]}`);
+  }
+});
+
+check('every pick level is a proper distribution', () => {
+  for (let k = 1; k <= 10; k++) {
+    const rows = distribution(k);
+    eq(rows.length, k + 1, `k=${k} row count`);
+    const total = rows.reduce((a, r) => a + r.p, 0);
+    assert(Math.abs(total - 1) < 1e-9, `k=${k} sums to ${total}`);
+    for (const r of rows) assert(r.p >= 0 && r.p <= 1, `k=${k} m=${r.m} p=${r.p}`);
+    assert(Math.abs(rows[0].atLeast - 1) < 1e-9, `k=${k} P(at least 0) = ${rows[0].atLeast}`);
+    for (let i = 1; i < rows.length; i++) {
+      assert(rows[i].atLeast <= rows[i - 1].atLeast + 1e-12, `k=${k} tail not monotonic`);
+    }
+    const mean = rows.reduce((a, r) => a + r.m * r.p, 0);
+    assert(Math.abs(mean - meanMatches(k)) < 1e-9, `k=${k} mean ${mean} vs ${meanMatches(k)}`);
+  }
+});
+
+check('comb is exact across the range keno actually uses', () => {
+  // hyperPmf only ever needs C(80, k), C(60, k) and C(20, m) for k, m <= 10,
+  // all of which are below 2^53 and therefore exact in a double.
+  eq(comb(80, 10), 1646492110120, 'C(80,10)');
+  eq(comb(60, 10), 75394027566, 'C(60,10)');
+  eq(comb(20, 10), 184756, 'C(20,10)');
+  eq(comb(5, 0), 1, 'C(5,0)');
+  eq(comb(5, 6), 0, 'C(5,6)');
+  for (let k = 0; k <= 10; k++) {
+    for (const n of [20, 60, 80]) {
+      const c = comb(n, k);
+      assert(Number.isSafeInteger(c), `C(${n},${k}) = ${c} is not an exact integer`);
+    }
+  }
+  // Outside that range the guard returns 0 rather than a silently wrong value.
+  eq(hyperPmf(0, 20), 0, 'k=20 rejected');
+  eq(hyperPmf(0, 0), 0, 'k=0 rejected');
+});
+
+check('win probability is the tail of the distribution', () => {
+  for (let k = 1; k <= 10; k++) {
+    for (let t = 0; t <= k; t++) {
+      let manual = 0;
+      for (let m = t; m <= k; m++) manual += hyperPmf(m, k);
+      const got = winProbability(k, t);
+      assert(Math.abs(got - manual) < 1e-12, `k=${k} t=${t}: ${got} vs ${manual}`);
+    }
+    assert(Math.abs(winProbability(k, 0) - 1) < 1e-9, `k=${k} threshold 0 should be certain`);
+  }
+});
+
+check('generated tickets are valid and selection-neutral', () => {
+  const rng = makeRng('keno');
+  for (let k = 1; k <= 10; k++) {
+    for (let i = 0; i < 40; i++) {
+      const t = generateTicket(k, rng);
+      eq(t.length, k, `k=${k} size`);
+      eq(new Set(t).size, k, `k=${k} duplicates`);
+      for (const n of t) assert(n >= 1 && n <= 80, `k=${k} ${n} outside 1-80`);
+      for (let j = 1; j < t.length; j++) assert(t[j - 1] < t[j], `k=${k} not sorted`);
+    }
+  }
+});
+
+check('all-levels generation reports the right odds per level', () => {
+  const levels = generateAllLevels(makeRng(7));
+  eq(levels.length, 10, 'level count');
+  for (const lv of levels) {
+    eq(lv.numbers.length, lv.k, `k=${lv.k} ticket size`);
+    assert(Math.abs(lv.pWin - winProbability(lv.k, lv.threshold)) < 1e-12, `k=${lv.k} pWin`);
+    assert(Math.abs(lv.pAll - hyperPmf(lv.k, lv.k)) < 1e-15, `k=${lv.k} pAll`);
+    assert(Math.abs(lv.oneIn - 1 / lv.pWin) < 1e-6, `k=${lv.k} oneIn`);
+  }
+});
+
+check('theory matches the real Keno history', () => {
+  // The strongest available check: score fixed tickets against tens of
+  // thousands of actual draws and compare to the exact distribution.
+  const draws = parseJsonl(readData('keno.jsonl'))
+    .filter((r) => r.result.length === 20);
+  assert(draws.length > 50000, `only ${draws.length} keno draws`);
+
+  const rng = makeRng('history');
+  for (const k of [2, 5, 10]) {
+    // Average the observed rate over several independent tickets.
+    let totalObs = 0;
+    let totalExp = 0;
+    const tickets = 5;
+    for (let i = 0; i < tickets; i++) {
+      const ticket = generateTicket(k, rng);
+      const t = defaultThreshold(k);
+      const s = scoreAgainstHistory(ticket, draws, t);
+      totalObs += s.observedWinRate;
+      totalExp += winProbability(k, t);
+    }
+    const obs = totalObs / tickets;
+    const exp = totalExp / tickets;
+    // Standard error of the mean over tickets * draws.
+    const se = Math.sqrt((exp * (1 - exp)) / (draws.length * tickets));
+    const z = (obs - exp) / se;
+    out(`       k=${k}: observed win rate ${(obs * 100).toFixed(3)}% vs exact ${(exp * 100).toFixed(3)}%  (z = ${z.toFixed(2)})`);
+    assert(Math.abs(z) < 4, `k=${k} observed ${obs} vs expected ${exp} (z = ${z.toFixed(2)})`);
+  }
 });
 
 /* ---- chart scale ---- */

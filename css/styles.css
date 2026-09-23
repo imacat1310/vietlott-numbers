@@ -164,11 +164,13 @@ header.top {
 .card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .card-head .sub { color: var(--muted); font-size: 12px; }
 
-.grid-2 { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 16px; align-items: start; }
-.grid-halves { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+/* minmax(0, ...) lets a track shrink below its contents' min-content width,
+   which keeps wide children (tables, selects) from stretching the page. */
+.grid-2 { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.grid-halves { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 
 @media (max-width: 860px) {
-  .grid-2, .grid-halves { grid-template-columns: 1fr; }
+  .grid-2, .grid-halves { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- controls ---------- */
@@ -185,6 +187,7 @@ label.field .hint { color: var(--muted); font-weight: 400; }
 
 select, input[type="number"], input[type="text"], input[type="date"] {
   width: 100%;
+  min-width: 0;
   font: inherit;
   font-size: 14px;
   padding: 7px 9px;
@@ -255,6 +258,10 @@ button.btn.wide { width: 100%; }
 .ball.bonus { background: var(--series-2); }
 .ball.ghost { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
 .ball-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+/* Inside a table the cell is narrow, so wrapping stacks the balls one per line
+   and the row becomes enormously tall. Keep them on one line and let
+   .table-wrap scroll sideways instead. */
+table.data .ball-row { flex-wrap: nowrap; }
 .ball-sep { color: var(--muted); font-size: 18px; padding: 0 2px; }
 
 .tags { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }

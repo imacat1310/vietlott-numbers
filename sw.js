@@ -5,7 +5,7 @@
  * clients pick up new code on their next launch.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `vietlott-${VERSION}`;
 
 // Relative to the service worker's own location, so this works unchanged at a
@@ -24,6 +24,7 @@ const SHELL = [
   './js/stats.js',
   './js/backtest.js',
   './js/chart.js',
+  './js/keno.js',
   './data/power655.jsonl',
   './data/power645.jsonl',
   './data/power535.jsonl',

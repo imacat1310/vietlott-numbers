@@ -17,6 +17,7 @@ is 1 in 28,989,675 however you choose it. The app is built to *show* you that �
 - [Generate — picking numbers](#generate--picking-numbers)
 - [Statistics — what the history looks like](#statistics--what-the-history-looks-like)
 - [Backtest — does a strategy actually work?](#backtest--does-a-strategy-actually-work)
+- [Keno — how many numbers to play](#keno--how-many-numbers-to-play)
 - [Data & crawler — keeping results up to date](#data--crawler--keeping-results-up-to-date)
 - [The eight strategies](#the-eight-strategies)
 - [Reading the results honestly](#reading-the-results-honestly)
@@ -191,6 +192,45 @@ differences are noise, and the app says so under every backtest.
 
 ---
 
+## Keno — how many numbers to play
+
+Keno is a different game, so it gets its own tab and none of the eight strategies.
+
+A Keno draw takes 20 of the 80 numbers. You choose how many numbers to play, from 1
+to 10, and you win according to how many of yours come up. The important thing:
+**for any given number of picks, every combination has exactly the same odds.** Ten
+numbers off a birthday and ten numbers picked at random are indistinguishable. The
+one decision that genuinely changes your chances is *how many* numbers you play.
+
+So that is what the tab is built around.
+
+1. Set **Numbers played** — the *k* you are considering, 1 to 10.
+2. Set **A win means matching at least** — the point where you start getting paid.
+3. Press **Generate**.
+
+You get a ticket for *every* level from 1 to 10 at once, each with its exact odds,
+and the level with the best chance of a win is called out underneath. Change the
+thresholds and the best level changes with them.
+
+Below that, for the level you selected: the chance of every possible result, from
+matching none to matching all of them, as a chart and a table — including the "at
+least this many" column, which is usually the number you actually care about.
+
+### Set the thresholds to the real ones
+
+The app starts with a placeholder: a win means matching at least half your numbers,
+rounded up. **That is not Vietlott's prize table** — the prize rules are not in the
+draw data, so the app cannot know them. Until you set the real thresholds for each
+level, the comparison between levels is answering a made-up question. Once you do,
+it answers the real one exactly.
+
+### Checked against real draws
+
+The bottom panel scores your ticket against the last 5,000 real Keno draws and shows
+how often it would actually have won, next to what the maths predicted. These two
+columns track each other closely. That is the honest demonstration: the odds shown
+are not a model of Keno that might be wrong, they are simply what the game is.
+
 ## Data & crawler — keeping results up to date
 
 Four tiles show how many draws are stored, the most recent one, when the app last
@@ -322,6 +362,10 @@ so give it up to a day. Press **Crawl now** to check immediately.
 **Numbers came out different with the same seed.**
 The seed only fixes the randomness. Change the game, the strategy, any of its
 settings, or the amount of history stored, and the result changes too.
+
+**The Keno tab says a different level is best than I expected.**
+It is answering the question using whatever thresholds are set, and the default is a
+placeholder, not Vietlott's prize table. Set the real thresholds first.
 
 **The backtest takes a while.**
 "Compare all strategies" over a long window runs eight strategies across hundreds of

@@ -291,6 +291,10 @@ def main():
                     help="stop after this many consecutive all-known pages")
     ap.add_argument("--verify", action="store_true",
                     help="check the output file and exit without crawling")
+    ap.add_argument("--recent-out", default="data/keno-recent.jsonl",
+                    help="also write a trimmed tail of the history for the web app")
+    ap.add_argument("--recent-count", type=int, default=5000,
+                    help="how many of the newest draws the trimmed file keeps")
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -355,6 +359,18 @@ def main():
         time.sleep(args.delay + random.uniform(0, 0.6))
 
     ordered = write_jsonl(out, rows)
+
+    # The full file is ~13 MB, too heavy for the browser app to fetch, so keep
+    # a trimmed tail beside it for the Keno tab.
+    if args.recent_out and args.recent_count > 0:
+        recent = Path(args.recent_out)
+        tail = ordered[-args.recent_count:]
+        with recent.open("w", encoding="utf-8") as fh:
+            for row in tail:
+                fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+        size_mb = recent.stat().st_size / 1e6
+        print(f"trimmed copy  : {recent} — {len(tail)} draws, {size_mb:.2f} MB")
+
     print()
     print(f"pages fetched : {fetched} (through page {last_page}), {failures} failed")
     print(f"new draws     : {added}")
