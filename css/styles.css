@@ -1,0 +1,469 @@
+/* Vietlott number generator - design tokens follow the validated reference
+   palette (blue sequential for magnitude charts, status colours reserved). */
+
+:root {
+  color-scheme: light;
+
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f2f1ed;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --line: #c3c2b7;
+
+  --series-1: #2a78d6;
+  --series-1-soft: #86b6ef;   /* lightest ordinal step that clears 2:1 on light */
+  --series-2: #eb6834;
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 8px 24px rgba(11, 11, 11, 0.05);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --line: #383835;
+    --series-1: #3987e5;
+    --series-1-soft: #184f95;
+    --series-2: #d95926;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --line: #383835;
+  --series-1: #3987e5;
+  --series-1-soft: #184f95;
+  --series-2: #d95926;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 620; letter-spacing: -0.01em; }
+h1 { font-size: 17px; }
+h2 { font-size: 15px; }
+h3 { font-size: 13px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; }
+p { margin: 0 0 10px; }
+
+a { color: var(--series-1); }
+
+/* ---------- shell ---------- */
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 16px 64px;
+}
+
+header.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--plane) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--grid);
+  margin: 0 0 20px;
+  padding: 12px 0;
+}
+
+.top-row {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.brand { display: flex; align-items: center; gap: 9px; margin-right: auto; }
+.brand .dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--series-1); color: #fff;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 700;
+}
+.brand small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-2);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+.tabs button {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tabs button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ---------- cards ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--grid);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.card + .card { margin-top: 16px; }
+.card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.card-head .sub { color: var(--muted); font-size: 12px; }
+
+.grid-2 { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 16px; align-items: start; }
+.grid-halves { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+
+@media (max-width: 860px) {
+  .grid-2, .grid-halves { grid-template-columns: 1fr; }
+}
+
+/* ---------- controls ---------- */
+
+label.field { display: block; margin-bottom: 12px; }
+label.field > span {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+  font-weight: 550;
+}
+label.field .hint { color: var(--muted); font-weight: 400; }
+
+select, input[type="number"], input[type="text"], input[type="date"] {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
+select:focus-visible, input:focus-visible, button:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+input[type="range"] { width: 100%; accent-color: var(--series-1); }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row output { font: 13px var(--mono); color: var(--ink-2); min-width: 34px; text-align: right; }
+
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.check input { accent-color: var(--series-1); }
+
+button.btn {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 560;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.btn:hover:not(:disabled) { background: var(--surface-2); }
+button.btn.primary {
+  background: var(--series-1);
+  border-color: var(--series-1);
+  color: #fff;
+}
+button.btn.primary:hover:not(:disabled) { filter: brightness(1.07); }
+button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+button.btn.wide { width: 100%; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- balls ---------- */
+
+.ticket {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--grid);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.ticket + .ticket { margin-top: 8px; }
+.ticket .idx { color: var(--muted); font: 12px var(--mono); min-width: 24px; }
+
+.ball {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font: 600 15px var(--mono);
+  background: var(--series-1);
+  color: #fff;
+  flex: 0 0 auto;
+}
+.ball.sm { width: 28px; height: 28px; font-size: 12px; }
+.ball.bonus { background: var(--series-2); }
+.ball.ghost { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+.ball-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ball-sep { color: var(--muted); font-size: 18px; padding: 0 2px; }
+
+.tags { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--grid);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--grid)); }
+.tag.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--grid)); }
+.tag.crit { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 40%, var(--grid)); }
+
+/* ---------- stat tiles ---------- */
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--grid);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.tile .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.tile .v { font: 600 22px/1.25 -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing: -0.02em; margin-top: 3px; }
+.tile .v.mono { font-family: var(--mono); font-size: 19px; }
+.tile .s { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.tile .v.pos { color: var(--good); }
+.tile .v.neg { color: var(--critical); }
+
+/* ---------- table ---------- */
+
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th, table.data td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+table.data th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+table.data td.num { text-align: right; font-family: var(--mono); }
+table.data tbody tr:hover { background: var(--surface-2); }
+table.data td.best { font-weight: 650; color: var(--series-1); }
+
+/* ---------- chart ---------- */
+
+.chart { position: relative; }
+/* The SVG carries its own pixel width/height; chart.js re-renders on resize. */
+.chart svg { display: block; }
+.chart .bar { fill: var(--series-1); }
+.chart .bar.dim { fill: var(--series-1-soft); }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart .hit:hover + .bar, .chart .bar.hover { filter: brightness(1.15); }
+.chart .grid-line { stroke: var(--grid); stroke-width: 1; }
+.chart .axis-line { stroke: var(--line); stroke-width: 1; }
+.chart text { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+.chart text.val { fill: var(--ink-2); font-size: 10px; }
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--plane);
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  transform: translate(-50%, -125%);
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.tooltip.show { opacity: 1; }
+.tooltip b { font-family: var(--mono); }
+
+/* ---------- status / log ---------- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  padding: 4px 9px;
+  border: 1px solid var(--grid);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.status .led { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.status .led.live { background: var(--good); }
+.status .led.warn { background: var(--warning); }
+.status .led.off { background: var(--critical); }
+
+.log {
+  font: 12px/1.6 var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--grid);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--ink-2);
+}
+
+.note {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-left: 3px solid var(--series-1);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 9px 12px;
+  margin: 12px 0 0;
+}
+.note.warn { border-left-color: var(--warning); }
+.note strong { color: var(--ink); }
+
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.spinner {
+  width: 13px; height: 13px;
+  border: 2px solid var(--line);
+  border-top-color: var(--series-1);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+  vertical-align: -2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+footer.foot {
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--grid);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- iOS / touch ---------- */
+
+/* Safari zooms the whole page when a focused control is under 16px, which
+   leaves the layout scrolled sideways. Touch pointers get 16px controls. */
+@media (pointer: coarse) {
+  select,
+  input[type="number"],
+  input[type="text"],
+  input[type="date"] {
+    font-size: 16px;
+    padding: 9px 10px;
+  }
+
+  button.btn { padding: 11px 16px; }          /* ~44px tall touch targets */
+  .tabs button { padding: 10px 16px; }
+  .check { padding: 4px 0; }
+  .check input { width: 20px; height: 20px; }
+  input[type="range"] { height: 28px; }
+}
+
+/* Notch and home-indicator insets, which apply once installed to the Home
+   Screen and the web view goes full-bleed. */
+@supports (padding: max(0px)) {
+  header.top { padding-top: max(12px, env(safe-area-inset-top)); }
+
+  .top-row {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .app {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(64px, calc(env(safe-area-inset-bottom) + 48px));
+  }
+}
+
+/* Rubber-banding the page behind a sticky header looks broken on iOS. */
+body { overscroll-behavior-y: none; }
+
+.hide-narrow { display: inline; }
+
+@media (max-width: 560px) {
+  .brand small { display: none; }
+  .hide-narrow { display: none; }
+  .tabs { overflow-x: visible; }
+  .tabs button { padding: 10px 4px; font-size: 13.5px; }
+  h1 { font-size: 16px; }
+  .top-row { gap: 8px; }
+  #product { flex: 1 1 auto; min-width: 0; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .ball { width: 34px; height: 34px; font-size: 14px; }
+  .card { padding: 14px; }
+}

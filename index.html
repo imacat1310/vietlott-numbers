@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vietlott Number Generator</title>
+<meta name="description" content="Generate Vietlott numbers using the prediction strategies from vietvudanh/vietlott-data, backed by continuously crawled draw history.">
+
+<!-- Installable on iOS: Share -> Add to Home Screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vietlott">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <span class="dot">V</span>
+      <div>
+        <h1>Vietlott Number Generator</h1>
+        <small>Strategies ported from vietvudanh/vietlott-data</small>
+      </div>
+    </div>
+    <label class="sr-only" for="product">Product</label>
+    <select id="product" style="width:auto;min-width:170px"></select>
+    <span class="status" id="data-status"><span class="led"></span><span id="data-status-text">loading…</span></span>
+    <button class="btn" id="theme-toggle" title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>
+  </div>
+</header>
+
+<div class="app">
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-generate" aria-controls="panel-generate" aria-selected="true">Generate</button>
+    <button role="tab" id="tab-stats" aria-controls="panel-stats" aria-selected="false">Statistics</button>
+    <button role="tab" id="tab-backtest" aria-controls="panel-backtest" aria-selected="false">Backtest</button>
+    <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false">Data<span class="hide-narrow"> &amp; crawler</span></button>
+  </div>
+
+  <!-- ============ GENERATE ============ -->
+  <section class="panel active" id="panel-generate" role="tabpanel" aria-labelledby="tab-generate">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h2>Strategy</h2></div>
+
+        <label class="field">
+          <span>Method</span>
+          <select id="gen-strategy"></select>
+        </label>
+        <p class="muted" id="gen-blurb" style="font-size:12.5px"></p>
+
+        <div id="gen-params"></div>
+
+        <hr style="border:0;border-top:1px solid var(--grid);margin:14px 0">
+
+        <label class="field">
+          <span>Tickets to generate</span>
+          <input type="number" id="gen-count" value="5" min="1" max="50" step="1">
+        </label>
+
+        <label class="field">
+          <span>Seed <span class="hint">(blank = fresh randomness)</span></span>
+          <input type="text" id="gen-seed" placeholder="e.g. 2026">
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="gen-bonus">
+          <span>Count the bonus ball in statistics</span>
+        </label>
+
+        <button class="btn primary wide" id="gen-run">Generate numbers</button>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Your numbers</h2>
+            <span class="sub" id="gen-context"></span>
+            <div class="btn-row" style="margin-left:auto">
+              <button class="btn" id="gen-copy">Copy</button>
+            </div>
+          </div>
+          <div id="gen-output"><p class="muted">Pick a strategy and hit generate.</p></div>
+          <p class="note warn" id="gen-note" hidden></p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Latest draws</h2>
+            <span class="sub">most recent first</span>
+          </div>
+          <div id="gen-recent"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STATISTICS ============ -->
+  <section class="panel" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats">
+    <div class="tiles" id="stats-tiles"></div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-head">
+        <h2 id="stats-chart-title">Number frequency</h2>
+        <span class="sub" id="stats-chart-sub"></span>
+        <label class="field" style="margin:0 0 0 auto;min-width:210px">
+          <span class="sr-only">Metric</span>
+          <select id="stats-metric">
+            <option value="freq">Times drawn</option>
+            <option value="days">Days since last drawn</option>
+            <option value="draws">Draws since last drawn</option>
+          </select>
+        </label>
+      </div>
+      <div id="stats-chart"></div>
+      <div class="btn-row" style="margin-top:12px">
+        <label class="check" style="margin:0">
+          <input type="checkbox" id="stats-window">
+          <span>Limit to the last</span>
+        </label>
+        <input type="number" id="stats-window-n" value="100" min="10" max="2000" step="10" style="width:90px" disabled>
+        <span class="muted" style="font-size:13px;align-self:center">draws</span>
+        <label class="check" style="margin:0 0 0 12px">
+          <input type="checkbox" id="stats-bonus">
+          <span>Include bonus ball</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="grid-halves" style="margin-top:16px">
+      <div class="card">
+        <div class="card-head"><h2>Recent draws</h2><span class="sub">last 15</span></div>
+        <div id="stats-recent"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Most common pairs</h2><span class="sub">numbers drawn together</span></div>
+        <div id="stats-pairs"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BACKTEST ============ -->
+  <section class="panel" id="panel-backtest" role="tabpanel" aria-labelledby="tab-backtest">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h2>Backtest</h2></div>
+
+        <label class="field">
+          <span>Strategy</span>
+          <select id="bt-strategy"><option value="__all__">Compare all strategies</option></select>
+        </label>
+
+        <label class="field">
+          <span>Evaluate the last N draws</span>
+          <input type="number" id="bt-n" value="52" min="5" max="1500" step="1">
+        </label>
+
+        <label class="field">
+          <span>Tickets per draw</span>
+          <input type="number" id="bt-tickets" value="1" min="1" max="20" step="1">
+        </label>
+
+        <label class="field">
+          <span>Seed <span class="hint">(fixed = reproducible)</span></span>
+          <input type="text" id="bt-seed" value="2026">
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="bt-bonus">
+          <span>Count the bonus ball as a match</span>
+        </label>
+
+        <details style="margin-bottom:12px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--ink-2);font-weight:550">Prize table (VND)</summary>
+          <div id="bt-prizes" style="margin-top:10px"></div>
+        </details>
+
+        <button class="btn primary wide" id="bt-run">Run backtest</button>
+        <p class="muted" id="bt-progress" style="font-size:12px;margin-top:8px"></p>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-head"><h2>Result</h2><span class="sub" id="bt-sub"></span></div>
+          <div id="bt-result"><p class="muted">Run a backtest to see how a strategy would have done.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DATA ============ -->
+  <section class="panel" id="panel-data" role="tabpanel" aria-labelledby="tab-data">
+    <div class="tiles" id="data-tiles"></div>
+
+    <div class="grid-halves" style="margin-top:16px">
+      <div class="card">
+        <div class="card-head"><h2>Keep crawling</h2></div>
+
+        <label class="field">
+          <span>Result pages to crawl per run <span class="hint">(~8 draws per page)</span></span>
+          <input type="number" id="crawl-pages" value="2" min="1" max="60" step="1">
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="crawl-auto">
+          <span>Auto-crawl while this tab is open</span>
+        </label>
+
+        <label class="field">
+          <span>Interval (minutes)</span>
+          <input type="number" id="crawl-interval" value="30" min="1" max="1440" step="1">
+        </label>
+
+        <div class="btn-row">
+          <button class="btn primary" id="crawl-now">Crawl now</button>
+          <button class="btn" id="crawl-backfill">Deep backfill</button>
+          <button class="btn" id="crawl-github">Sync from GitHub</button>
+        </div>
+
+        <p class="note" id="crawl-source-note"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Activity</h2><span class="sub" id="crawl-next"></span></div>
+        <div class="log" id="crawl-log">ready</div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn" id="data-export">Export JSONL</button>
+          <button class="btn" id="data-clear">Clear local cache</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h2>Stored history</h2><span class="sub" id="data-range"></span></div>
+      <div id="data-table"></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    Draw history and strategies from
+    <a href="https://github.com/vietvudanh/vietlott-data" target="_blank" rel="noopener">vietvudanh/vietlott-data</a>.
+    Lottery draws are independent events &mdash; no strategy here changes the odds, and every
+    backtest in this app loses money over time. Play for fun, not for return.
+  </footer>
+</div>
+
+<script type="module" src="js/app.js"></script>
+<script>
+  // Offline support once installed. Absent on file:// and harmless if it fails.
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
