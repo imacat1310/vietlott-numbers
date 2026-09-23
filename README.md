@@ -144,11 +144,45 @@ js/stats.js             frequency, absence, pairs
 js/backtest.js          backtest harness and prize accounting
 js/chart.js             SVG bar chart
 js/app.js               tabs, rendering, crawl scheduling
-data/*.jsonl            bundled snapshot
+data/*.jsonl            bundled snapshot (Power 6/55, 6/45, 5/35 and Keno)
+tools/crawl_keno.py     Keno crawler (standalone, stdlib only)
 ci/                     optional GitHub Actions workflow
 icons/                  app and Home Screen icons
 tests/run.mjs           test suite for the non-DOM modules
 ```
+
+## Keno
+
+`data/keno.jsonl` holds the Keno draw history — 85,707 draws from 2022-12-04 to
+2026-09-23, one per line, in the upstream schema:
+
+```json
+{"date":"2026-09-23","id":"#0296762","result":[2,5,9,...],"big_small":"Chẵn (12)","odd_even":"Lớn (13)"}
+```
+
+Keno draws 20 numbers from 1–80 roughly every 10 minutes, about 119 times a day, so
+the file is ~13 MB. Two quirks carried over from upstream for compatibility: the
+`big_small` key actually holds the site's Chẵn/Lẻ (even/odd) figure and `odd_even`
+holds Lớn/Nhỏ (big/small) — the names are swapped relative to their contents.
+
+`tools/crawl_keno.py` crawls it. Standard library only, no arguments needed:
+
+```
+python3 tools/crawl_keno.py                    # top up with anything new
+python3 tools/crawl_keno.py --pages 500        # crawl further back
+python3 tools/crawl_keno.py --verify           # check the file, don't crawl
+```
+
+The endpoint returns 6 draws per page, newest first, so one day is about 16 pages.
+It is slow and rate-limits bursts, so requests are paced (`--delay`, default 2s) and
+retried with backoff. By default the crawl stops once it reaches draws already in
+the file, which makes repeat runs cheap; `--full` keeps going. Progress is written
+to the file every 20 pages, so an interrupted crawl keeps what it collected.
+
+> Keno is **not** wired into the generator UI. The eight strategies and the whole
+> backtest are built around picking `k` numbers from a pool, which does not map onto
+> a game that draws 20 of 80 for you. The data is here for analysis; adding a Keno
+> tab would mean new strategies and a different prize model.
 
 ## Tests
 
