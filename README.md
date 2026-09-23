@@ -4,6 +4,9 @@ A browser app that generates Vietlott numbers using the prediction strategies fr
 [vietvudanh/vietlott-data](https://github.com/vietvudanh/vietlott-data), and keeps
 crawling vietlott.vn for new winning numbers.
 
+**Live: https://imacat1310.github.io/vietlott-numbers/** — open it on an iPhone and
+add it to your Home Screen, or run it locally for live crawling.
+
 Plain HTML + ES modules. No build step, no npm install, no framework.
 
 ```

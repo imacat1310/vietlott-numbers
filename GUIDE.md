@@ -31,7 +31,7 @@ from.
 
 | How you run it | Live crawl of vietlott.vn | Best for |
 |---|---|---|
-| Open the published web address (GitHub Pages) | No — syncs from GitHub instead | Phone, tablet, anywhere |
+| Open [https://imacat1310.github.io/vietlott-numbers/](https://imacat1310.github.io/vietlott-numbers/) | No — syncs from GitHub instead | Phone, tablet, anywhere |
 | `python3 server.py` on your computer | **Yes** | Getting results the moment they are published |
 | Any other static web server | No — syncs from GitHub instead | Sharing on a network |
 
@@ -54,8 +54,8 @@ already loaded, so everything works straight away.
 
 The app installs to your Home Screen and runs full screen, with no browser bars.
 
-1. Open the published address in **Safari**. It must be Safari — Chrome on iOS
-   cannot install web apps.
+1. Open **[https://imacat1310.github.io/vietlott-numbers/](https://imacat1310.github.io/vietlott-numbers/)** in **Safari**.
+   It must be Safari — Chrome on iOS cannot install web apps.
 2. Tap the **Share** button (the square with an arrow, at the bottom of the screen).
 3. Scroll down and tap **Add to Home Screen**.
 4. Tap **Add**.
@@ -306,8 +306,9 @@ Use it to pick numbers you enjoy, and spend accordingly.
 
 **"No local proxy" in the Data tab.**
 Expected on a phone, or on any web address that is not your own computer. The app is
-syncing from GitHub instead and everything else works. For live crawling, run
-`python3 server.py` and open http://localhost:8099.
+syncing from GitHub instead and everything else works, and the single `api/health`
+404 in the browser console is just the app checking whether a relay is there. For
+live crawling, run `python3 server.py` and open http://localhost:8099.
 
 **Live crawl fails and it falls back to GitHub.**
 vietlott.vn blocks a lot of non-Vietnam network addresses, and it sometimes drops
