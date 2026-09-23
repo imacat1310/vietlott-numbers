@@ -14,7 +14,8 @@ import { frequency, absence, topPairs, shapeSummary } from './stats.js';
 import { runBacktest, expectedRandomMatches } from './backtest.js';
 import {
   KENO, distribution, winProbability, generateAllLevels, generateTicket,
-  defaultThreshold, defaultThresholds, scoreAgainstHistory, hyperPmf,
+  scoreAgainstHistory, hyperPmf, evaluate, examplePrizes, payableCounts,
+  DEFAULT_TICKET_PRICE,
 } from './keno.js';
 import { barChart } from './chart.js';
 
@@ -43,7 +44,10 @@ function fmtVnd(n) {
   const abs = Math.abs(n);
   if (abs >= 1e9) return `${(n / 1e9).toFixed(abs >= 1e10 ? 0 : 1)}B ₫`;
   if (abs >= 1e6) return `${(n / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M ₫`;
-  if (abs >= 1e3) return `${fmtInt(n / 1e3)}k ₫`;
+  // Below 100k, show the exact figure: expected values sit around a few
+  // thousand dong and rounding them to "6k" hides the differences between
+  // pick levels, which is the whole point of the column.
+  if (abs >= 1e5) return `${fmtInt(n / 1e3)}k ₫`;
   return `${fmtInt(n)} ₫`;
 }
 
@@ -621,7 +625,39 @@ function renderBacktestResults(results, isComparison) {
  * keno tab
  * ------------------------------------------------------------------ */
 
-const keno = { thresholds: defaultThresholds(), draws: null, loading: null, levels: null };
+const keno = {
+  prizes: examplePrizes(DEFAULT_TICKET_PRICE),
+  price: DEFAULT_TICKET_PRICE,
+  draws: null,
+  loading: null,
+  levels: null,
+  edited: false,
+};
+
+function loadKenoPrizes() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}keno.prizes`));
+    if (raw && raw.prizes) {
+      keno.prizes = raw.prizes;
+      keno.price = Number(raw.price) || DEFAULT_TICKET_PRICE;
+      keno.edited = !!raw.edited;
+      $('keno-price').value = keno.price;
+    }
+  } catch {
+    /* keep the defaults */
+  }
+}
+
+function saveKenoPrizes() {
+  try {
+    localStorage.setItem(
+      `${STORAGE_PREFIX}keno.prizes`,
+      JSON.stringify({ prizes: keno.prizes, price: keno.price, edited: keno.edited })
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
 
 /** The trimmed history is ~0.8 MB, so fetch it only when the tab is opened. */
 async function kenoHistory() {
@@ -644,6 +680,11 @@ async function kenoHistory() {
     keno.draws = rows;
     return rows;
   })();
+  // Do not leave a rejected promise cached, or every later attempt reuses the
+  // same failure and the panel never recovers without a reload.
+  keno.loading.catch(() => {
+    keno.loading = null;
+  });
   return keno.loading;
 }
 
@@ -651,80 +692,166 @@ function kenoK() {
   return Math.max(1, Math.min(KENO.maxPick, Number($('keno-k').value) || 1));
 }
 
-function syncKenoThreshold() {
-  const k = kenoK();
-  const current = keno.thresholds[k] ?? defaultThreshold(k);
-  const sel = $('keno-threshold');
-  sel.innerHTML = '';
-  for (let t = 1; t <= k; t++) {
-    const p = winProbability(k, t);
-    sel.innerHTML += `<option value="${t}"${t === current ? ' selected' : ''}>` +
-      `${t} of ${k} — ${(p * 100).toFixed(p < 1 ? 2 : 1)}%</option>`;
+/**
+ * The headline. Once prizes are in play "best" splits in two: the level that
+ * wins most often and the level that gives back the most are usually different,
+ * and saying which is which is the whole point of the table above.
+ */
+function renderKenoVerdict(mostOften, bestValue) {
+  if (!mostOften || !bestValue) {
+    return `<p class="note warn">No level has any prize set. Fill in the prize table
+      to get win chances and returns.</p>`;
   }
+  const example = keno.edited
+    ? ''
+    : ` <strong>These use the example prize amounts, not Vietlott's</strong> — edit the
+       prize table to get real figures.`;
+
+  const same = mostOften.k === bestValue.k;
+  const lead = same
+    ? `<strong>Play ${mostOften.k}</strong> — it both wins most often
+       (${(mostOften.pWin * 100).toFixed(2)}%, 1 in ${fmtOneIn(mostOften.oneIn)}) and
+       returns the most (${(bestValue.ret * 100).toFixed(1)}% of stake).`
+    : `<strong>Wins most often: play ${mostOften.k}</strong>
+       (${(mostOften.pWin * 100).toFixed(2)}%, 1 in ${fmtOneIn(mostOften.oneIn)}), but it
+       returns ${(mostOften.ret * 100).toFixed(1)}%.
+       <strong>Best return: play ${bestValue.k}</strong>
+       at ${(bestValue.ret * 100).toFixed(1)}%, winning only
+       ${(bestValue.pWin * 100).toFixed(2)}% of the time.
+       Frequent small wins and the best long-run value are different levels.`;
+
+  const edge = 1 - bestValue.ret;
+  return `<p class="note">${lead}${example}</p>
+    <p class="note warn"><strong>Every level still loses.</strong> The best return here
+    keeps ${(bestValue.ret * 100).toFixed(1)}% of your stake, so the house takes
+    ${(edge * 100).toFixed(1)}% of everything staked at that level. Picking the best
+    level slows the loss; it does not turn it into a gain. The swing column is the
+    standard deviation of a single ticket — where it dwarfs the ticket price, results
+    are dominated by rare large prizes, so a short run tells you nothing.</p>`;
+}
+
+/** Prize inputs for the selected level, highest match count first. */
+function renderKenoPrizeInputs() {
+  const k = kenoK();
+  $('keno-prize-k').textContent = `for ${k} number${k === 1 ? '' : 's'}`;
+  const table = keno.prizes[k] || {};
+  const rows = [];
+  for (let m = k; m >= 0; m--) {
+    const p = hyperPmf(m, k);
+    rows.push(`<label class="field prize-row">
+      <span>${m} of ${k} <span class="hint">${(p * 100).toFixed(p < 0.01 ? 4 : 2)}%</span></span>
+      <input type="number" class="keno-prize" data-m="${m}" min="0" step="1000"
+             value="${Number(table[m]) || 0}">
+    </label>`);
+  }
+  $('keno-prizes').innerHTML = rows.join('');
+  $('keno-prizes').querySelectorAll('.keno-prize').forEach((input) => {
+    input.addEventListener('change', () => {
+      const kk = kenoK();
+      keno.prizes[kk] = keno.prizes[kk] || {};
+      keno.prizes[kk][Number(input.dataset.m)] = Math.max(0, Number(input.value) || 0);
+      keno.edited = true;
+      saveKenoPrizes();
+      renderKeno();
+    });
+  });
 }
 
 function renderKeno() {
   const k = kenoK();
-  keno.thresholds[k] = Number($('keno-threshold').value) || defaultThreshold(k);
+  keno.price = Math.max(0, Number($('keno-price').value) || 0);
   const seed = $('keno-seed').value.trim() || null;
   const rng = makeRng(seed);
 
-  const levels = generateAllLevels(rng, keno.thresholds);
+  const levels = generateAllLevels(rng, keno.prizes, keno.price);
   keno.levels = levels;
+  saveKenoPrizes();
 
-  const best = levels.reduce((a, b) => (b.pWin > a.pWin ? b : a));
+  const playable = levels.filter((lv) => lv.hasPrizes);
+  const mostOften = playable.reduce((a, b) => (b.pWin > a.pWin ? b : a), playable[0]);
+  const bestValue = playable.reduce((a, b) => (b.ret > a.ret ? b : a), playable[0]);
+
   $('keno-levels').innerHTML = `<div class="table-wrap"><table class="data">
     <thead><tr>
-      <th>Play</th><th>Numbers</th><th class="num">Win on</th>
-      <th class="num">P(win)</th><th class="num">1 in</th><th class="num">All k</th>
+      <th>Play</th><th>Numbers</th><th class="num">Pays on</th>
+      <th class="num">P(win)</th><th class="num">1 in</th>
+      <th class="num">Top prize</th><th class="num">EV/ticket</th>
+      <th class="num">Return</th><th class="num">Swing</th>
     </tr></thead>
     <tbody>${levels
-      .map(
-        (lv) => `<tr${lv.k === k ? ' style="background:var(--surface-2)"' : ''}>
+      .map((lv) => {
+        const pays = lv.payable.length
+          ? lv.payable.slice().sort((a, b) => a - b).join(', ')
+          : '—';
+        return `<tr${lv.k === k ? ' style="background:var(--surface-2)"' : ''}>
           <td class="mono">${lv.k}</td>
           <td><span class="ball-row">${ballsHtml(lv.numbers, { small: true })}</span></td>
-          <td class="num">${lv.threshold}+</td>
-          <td class="num${lv === best ? ' best' : ''}">${(lv.pWin * 100).toFixed(2)}%</td>
+          <td class="num">${pays}</td>
+          <td class="num${lv === mostOften ? ' best' : ''}">${(lv.pWin * 100).toFixed(2)}%</td>
           <td class="num">${fmtOneIn(lv.oneIn)}</td>
-          <td class="num">1 in ${fmtOneIn(1 / lv.pAll)}</td>
-        </tr>`
-      )
+          <td class="num">${lv.topPrize ? fmtVnd(lv.topPrize) : '—'}</td>
+          <td class="num">${fmtVnd(lv.ev)}</td>
+          <td class="num${lv === bestValue ? ' best' : ''}">${(lv.ret * 100).toFixed(1)}%</td>
+          <td class="num">${fmtVnd(lv.sd)}</td>
+        </tr>`;
+      })
       .join('')}</tbody></table></div>
-    <p class="note"><strong>Highest chance of a win: play ${best.k}</strong>
-    at ${(best.pWin * 100).toFixed(2)}%, under the thresholds currently set.
-    Within any one row the numbers themselves make no difference — swap them for any
-    others and every figure on that row stays identical.</p>`;
+    ${renderKenoVerdict(mostOften, bestValue)}`;
 
   const rows = distribution(k);
-  const threshold = keno.thresholds[k];
+  const pays = new Set(payableCounts(keno.prizes, k));
+  const table = keno.prizes[k] || {};
   $('keno-dist-title').textContent = `Chance of each result when you play ${k}`;
   $('keno-dist-sub').textContent =
     `mean ${(k * KENO.drawn / KENO.max).toFixed(2)} matches · shaded bars count as a win`;
+  const ev = evaluate(k, keno.prizes, keno.price);
+  $('keno-dist-sub').textContent =
+    `mean ${(k * KENO.drawn / KENO.max).toFixed(2)} matches · shaded bars pay · ` +
+    `EV ${fmtVnd(ev.ev)} per ${fmtVnd(keno.price)} ticket`;
+
   barChart(
     $('keno-dist-chart'),
     rows.map((r) => ({
       label: r.m,
       value: r.p * 100,
-      dim: r.m < threshold,
+      dim: !pays.has(r.m),
       tip: `<b>${r.m} of ${k}</b> &middot; ${(r.p * 100).toFixed(3)}%` +
-        (r.p > 0 ? ` (1 in ${fmtOneIn(1 / r.p)})` : ''),
+        (r.p > 0 ? ` (1 in ${fmtOneIn(1 / r.p)})` : '') +
+        (pays.has(r.m) ? ` &middot; pays ${fmtVnd(Number(table[r.m]) || 0)}` : ''),
     })),
     { height: 180, valueFormat: (v) => `${v.toFixed(0)}%`, ariaLabel: 'chance of each match count' }
   );
 
   $('keno-dist-table').innerHTML = `<div class="table-wrap"><table class="data">
-    <thead><tr><th>Matches</th><th class="num">Chance</th><th class="num">1 in</th><th class="num">At least this many</th></tr></thead>
+    <thead><tr>
+      <th>Matches</th><th class="num">Chance</th><th class="num">1 in</th>
+      <th class="num">At least</th><th class="num">Pays</th><th class="num">Adds to EV</th>
+    </tr></thead>
     <tbody>${rows
-      .map(
-        (r) => `<tr>
-          <td class="mono">${r.m} of ${k}${r.m >= threshold ? ' ✓' : ''}</td>
+      .map((r) => {
+        const prize = Number(table[r.m]) || 0;
+        const paying = pays.has(r.m);
+        return `<tr>
+          <td class="mono">${r.m} of ${k}${paying ? ' ✓' : ''}</td>
           <td class="num">${(r.p * 100).toFixed(r.p < 0.001 ? 5 : 3)}%</td>
           <td class="num">${r.p > 0 ? fmtOneIn(1 / r.p) : '—'}</td>
           <td class="num">${(r.atLeast * 100).toFixed(r.atLeast < 0.001 ? 5 : 3)}%</td>
-        </tr>`
-      )
-      .join('')}</tbody></table></div>`;
+          <td class="num">${paying ? fmtVnd(prize) : '—'}</td>
+          <td class="num">${paying ? fmtVnd(r.p * prize) : '—'}</td>
+        </tr>`;
+      })
+      .join('')}
+      <tr><td class="mono"><strong>Total</strong></td><td class="num"></td><td class="num"></td>
+        <td class="num"></td><td class="num"></td>
+        <td class="num best">${fmtVnd(ev.ev)}</td></tr>
+    </tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-top:8px">
+      The last column is each result's chance multiplied by what it pays. They add up
+      to the expected value of one ticket: ${fmtVnd(ev.ev)} against a
+      ${fmtVnd(keno.price)} stake, or ${(ev.ret * 100).toFixed(1)}% back.
+    </p>`;
 
+  renderKenoPrizeInputs();
   renderKenoHistory(levels.find((lv) => lv.k === k));
 }
 
@@ -739,35 +866,44 @@ async function renderKenoHistory(level) {
     return;
   }
 
-  const s = scoreAgainstHistory(level.numbers, draws, level.threshold);
-  const exp = winProbability(level.k, level.threshold);
+  const s = scoreAgainstHistory(level.numbers, draws, keno.prizes, keno.price);
+  const exp = winProbability(level.k, keno.prizes);
   const se = Math.sqrt((exp * (1 - exp)) / s.draws);
   const z = se > 0 ? (s.observedWinRate - exp) / se : 0;
+  const pays = new Set(level.payable);
 
   $('keno-history-sub').textContent =
     `${fmtInt(s.draws)} draws · ${draws[0].date} → ${draws[draws.length - 1].date}`;
 
   box.innerHTML = `<div class="tiles">
-      ${tile('This ticket won', `${s.wins}×`, `out of ${fmtInt(s.draws)} draws`)}
-      ${tile('Observed rate', `${(s.observedWinRate * 100).toFixed(2)}%`, `exact odds say ${(exp * 100).toFixed(2)}%`)}
-      ${tile('Difference', `${z >= 0 ? '+' : ''}${z.toFixed(2)}σ`, Math.abs(z) < 2 ? 'as expected' : 'unusual run')}
+      ${tile('Would have staked', fmtVnd(s.spent), `${fmtInt(s.draws)} tickets`)}
+      ${tile('Would have won', fmtVnd(s.won), `${s.wins} winning draws`)}
+      ${`<div class="tile"><div class="k">Net</div><div class="v ${s.profit >= 0 ? 'pos' : 'neg'}">${fmtVnd(s.profit)}</div><div class="s">returned ${(s.actualReturn * 100).toFixed(1)}% vs ${(level.ret * 100).toFixed(1)}% expected</div></div>`}
+      ${tile('Win rate', `${(s.observedWinRate * 100).toFixed(2)}%`, `exact odds say ${(exp * 100).toFixed(2)}% (${z >= 0 ? '+' : ''}${z.toFixed(2)}σ)`)}
     </div>
     <div class="table-wrap" style="margin-top:12px"><table class="data">
-      <thead><tr><th>Matches</th><th class="num">Happened</th><th class="num">Expected</th><th class="num">Observed</th><th class="num">Exact</th></tr></thead>
+      <thead><tr>
+        <th>Matches</th><th class="num">Happened</th><th class="num">Expected</th>
+        <th class="num">Observed</th><th class="num">Exact</th><th class="num">Paid out</th>
+      </tr></thead>
       <tbody>${s.rows
         .map(
           (r) => `<tr>
-            <td class="mono">${r.m}${r.m >= level.threshold ? ' ✓' : ''}</td>
+            <td class="mono">${r.m}${pays.has(r.m) ? ' ✓' : ''}</td>
             <td class="num">${fmtInt(r.observed)}</td>
             <td class="num">${r.expected.toFixed(1)}</td>
             <td class="num">${(r.observedP * 100).toFixed(2)}%</td>
             <td class="num">${(r.expectedP * 100).toFixed(2)}%</td>
+            <td class="num">${r.paid > 0 ? fmtVnd(r.paid) : '—'}</td>
           </tr>`
         )
         .join('')}</tbody></table></div>
-    <p class="note">Your ${level.k} numbers scored against every one of these draws.
-    The observed column tracking the exact column is the point: the maths above is not a
-    model of Keno, it is Keno. Nothing about which numbers you chose moves it.</p>`;
+    <p class="note">Your ${level.k} numbers played against every one of these draws at
+    ${fmtVnd(keno.price)} a ticket. The observed column tracking the exact column is the
+    point: the maths above is not a model of Keno, it is Keno.
+    ${s.profit >= 0
+      ? 'This particular run came out ahead — over 5,000 draws that is luck, not an edge, and the swing column above says how much luck is available.'
+      : 'Nothing about which numbers you chose would have changed it.'}</p>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -941,11 +1077,23 @@ function initEvents() {
 
   $('keno-k').addEventListener('input', () => {
     $('keno-k').parentElement.querySelector('output').textContent = $('keno-k').value;
-    syncKenoThreshold();
   });
   $('keno-k').addEventListener('change', renderKeno);
-  $('keno-threshold').addEventListener('change', renderKeno);
+  $('keno-price').addEventListener('change', renderKeno);
   $('keno-run').addEventListener('click', renderKeno);
+  $('keno-prize-reset').addEventListener('click', () => {
+    keno.prizes = examplePrizes(keno.price || DEFAULT_TICKET_PRICE);
+    keno.edited = false;
+    saveKenoPrizes();
+    renderKeno();
+  });
+  $('keno-prize-clear').addEventListener('click', () => {
+    const k = kenoK();
+    keno.prizes[k] = {};
+    keno.edited = true;
+    saveKenoPrizes();
+    renderKeno();
+  });
   $('keno-copy').addEventListener('click', async () => {
     if (!keno.levels) return;
     const text = keno.levels
@@ -982,7 +1130,8 @@ async function main() {
   initTabs();
   initProducts();
   initStrategySelects();
-  syncKenoThreshold();
+  loadKenoPrizes();
+  renderKenoPrizeInputs();
   renderPrizeInputs();
   initEvents();
 

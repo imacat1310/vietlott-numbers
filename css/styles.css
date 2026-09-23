@@ -474,3 +474,14 @@ body { overscroll-behavior-y: none; }
   .ball { width: 34px; height: 34px; font-size: 14px; }
   .card { padding: 14px; }
 }
+
+/* Prize table editor: label left, amount right, compact enough for ten rows. */
+label.field.prize-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 130px);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+label.field.prize-row > span { margin-bottom: 0; }
+label.field.prize-row input { text-align: right; font-family: var(--mono); }

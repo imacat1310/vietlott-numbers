@@ -205,31 +205,51 @@ one decision that genuinely changes your chances is *how many* numbers you play.
 So that is what the tab is built around.
 
 1. Set **Numbers played** — the *k* you are considering, 1 to 10.
-2. Set **A win means matching at least** — the point where you start getting paid.
+2. Set the **Ticket price** and fill in the **Prize table** for that level.
 3. Press **Generate**.
 
-You get a ticket for *every* level from 1 to 10 at once, each with its exact odds,
-and the level with the best chance of a win is called out underneath. Change the
-thresholds and the best level changes with them.
+You get a ticket for *every* level from 1 to 10 at once. For each one the table shows
+how often it wins, what the top prize is, what a ticket is worth on average, how much
+of your stake comes back, and the swing.
 
-Below that, for the level you selected: the chance of every possible result, from
-matching none to matching all of them, as a chart and a table — including the "at
-least this many" column, which is usually the number you actually care about.
+### Two different "best"
 
-### Set the thresholds to the real ones
+Once prizes are in play there are two answers, and they are usually different levels:
 
-The app starts with a placeholder: a win means matching at least half your numbers,
-rounded up. **That is not Vietlott's prize table** — the prize rules are not in the
-draw data, so the app cannot know them. Until you set the real thresholds for each
-level, the comparison between levels is answering a made-up question. Once you do,
-it answers the real one exactly.
+- **Wins most often** — the level that pays out most frequently, mostly in small amounts.
+- **Best return** — the level that gives back the largest share of your stake over time.
+
+The tab names both, and says so when they disagree. Which you want depends on whether
+you would rather win small and often or lose more slowly.
+
+### Filling in the prize table
+
+Enter what each result pays. **Anything above zero counts as a win**, which is how the
+app knows what "winning" means — that matters because real Keno paytables often pay for
+matching *nothing* when you have played a lot of numbers, and a simple "match at least
+N" rule cannot express that.
+
+The app starts with **example amounts, not Vietlott's prize table.** The prize rules are
+not in the draw data, so the app cannot know them; the placeholder is shaped like a real
+paytable and tuned to return about 60% of stake, purely so the screen has something to
+compute. Every return and house-edge figure is only as real as the numbers you enter.
+Your table is saved on the device, so you only enter it once. "Reset to example" puts
+the placeholder back, "Clear level" empties the current one.
+
+Below the table, for the level you selected: the chance of every possible result, what
+each pays, and what each contributes to the expected value — those contributions add up
+to what one ticket is worth.
 
 ### Checked against real draws
 
-The bottom panel scores your ticket against the last 5,000 real Keno draws and shows
-how often it would actually have won, next to what the maths predicted. These two
-columns track each other closely. That is the honest demonstration: the odds shown
-are not a model of Keno that might be wrong, they are simply what the game is.
+The bottom panel plays your ticket against the last 5,000 real Keno draws and totals it
+up: what you would have staked, what you would have won, and the net. Beside it, how
+often it actually won against what the maths predicted. These track each other closely.
+That is the honest demonstration: the odds shown are not a model of Keno that might be
+wrong, they are simply what the game is.
+
+The net figure is almost always negative, and when it is not, that is a lucky run rather
+than an edge — check the swing column to see how much luck is available at that level.
 
 ## Data & crawler — keeping results up to date
 
@@ -364,8 +384,9 @@ The seed only fixes the randomness. Change the game, the strategy, any of its
 settings, or the amount of history stored, and the result changes too.
 
 **The Keno tab says a different level is best than I expected.**
-It is answering the question using whatever thresholds are set, and the default is a
-placeholder, not Vietlott's prize table. Set the real thresholds first.
+It answers using whatever prize table is entered, and the default is an example, not
+Vietlott's. Enter the real amounts first. Also check which "best" you are reading —
+the level that wins most often is usually not the one with the best return.
 
 **The backtest takes a while.**
 "Compare all strategies" over a long window runs eight strategies across hundreds of

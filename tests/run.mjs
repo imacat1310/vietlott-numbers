@@ -17,7 +17,8 @@ import { frequency, absence, topPairs } from '../js/stats.js';
 import { runBacktest, expectedRandomMatches } from '../js/backtest.js';
 import {
   comb, hyperPmf, distribution, winProbability, meanMatches,
-  generateTicket, generateAllLevels, defaultThreshold, scoreAgainstHistory,
+  generateTicket, generateAllLevels, scoreAgainstHistory,
+  evaluate, examplePrizes, payableCounts, DEFAULT_TICKET_PRICE,
 } from '../js/keno.js';
 
 /* ---- tiny test runner ---- */
@@ -38,6 +39,8 @@ function check(name, fn) {
 function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
+const fmt = (n) => n.toLocaleString('en-US');
+
 function eq(a, b, msg) {
   if (a !== b) throw new Error(`${msg || 'expected equal'}: ${a} !== ${b}`);
 }
@@ -449,16 +452,56 @@ check('comb is exact across the range keno actually uses', () => {
   eq(hyperPmf(0, 0), 0, 'k=0 rejected');
 });
 
-check('win probability is the tail of the distribution', () => {
+check('payable results come straight off the prize table', () => {
+  const prizes = { 4: { 4: 500, 3: 100, 2: 0, 1: 0, 0: 0 }, 5: { 0: 50, 5: 9000 } };
+  eq(JSON.stringify(payableCounts(prizes, 4)), '[3,4]', 'k=4 payable');
+  // A 0-match bonus is a real paytable feature that an "at least N" rule cannot express.
+  eq(JSON.stringify(payableCounts(prizes, 5)), '[0,5]', 'k=5 payable incl. zero-match');
+  eq(JSON.stringify(payableCounts({}, 3)), '[]', 'no table means nothing pays');
+
+  let expected = hyperPmf(3, 4) + hyperPmf(4, 4);
+  assert(Math.abs(winProbability(4, prizes) - expected) < 1e-12, 'k=4 win probability');
+  expected = hyperPmf(0, 5) + hyperPmf(5, 5);
+  assert(Math.abs(winProbability(5, prizes) - expected) < 1e-12, 'k=5 win probability');
+  eq(winProbability(3, {}), 0, 'nothing payable means no win');
+});
+
+check('expected value is the probability-weighted payout', () => {
+  const price = 10000;
+  const prizes = examplePrizes(price);
   for (let k = 1; k <= 10; k++) {
-    for (let t = 0; t <= k; t++) {
-      let manual = 0;
-      for (let m = t; m <= k; m++) manual += hyperPmf(m, k);
-      const got = winProbability(k, t);
-      assert(Math.abs(got - manual) < 1e-12, `k=${k} t=${t}: ${got} vs ${manual}`);
-    }
-    assert(Math.abs(winProbability(k, 0) - 1) < 1e-9, `k=${k} threshold 0 should be certain`);
+    const ev = evaluate(k, prizes, price);
+    let manual = 0;
+    for (let m = 0; m <= k; m++) manual += hyperPmf(m, k) * (prizes[k][m] || 0);
+    assert(Math.abs(ev.ev - manual) < 1e-6, `k=${k} EV ${ev.ev} vs ${manual}`);
+    assert(Math.abs(ev.ret - manual / price) < 1e-12, `k=${k} return`);
+    assert(Math.abs(ev.edge - (1 - ev.ret)) < 1e-12, `k=${k} edge`);
+    assert(ev.sd > 0, `k=${k} sd should be positive`);
+    assert(ev.pWin > 0 && ev.pWin <= 1, `k=${k} pWin ${ev.pWin}`);
+    // Every example level keeps the house ahead, as any real paytable does.
+    assert(ev.ret < 1, `k=${k} example table returns ${ev.ret}, should be under 1`);
   }
+});
+
+check('a paytable that pays back the stake exactly is break-even', () => {
+  // Contrived check on the arithmetic: pay 1/P(m) * price on one outcome and
+  // the return must come to exactly 100%.
+  const k = 4;
+  const price = 1000;
+  const p3 = hyperPmf(3, k);
+  const prizes = { [k]: { 3: price / p3 } };
+  const ev = evaluate(k, prizes, price);
+  assert(Math.abs(ev.ret - 1) < 1e-9, `return ${ev.ret} should be 1`);
+  assert(Math.abs(ev.edge) < 1e-9, `edge ${ev.edge} should be 0`);
+  assert(Math.abs(ev.profit) < 1e-6, `profit ${ev.profit} should be 0`);
+});
+
+check('an empty prize table yields no value and no win', () => {
+  const ev = evaluate(6, {}, 10000);
+  eq(ev.ev, 0, 'EV');
+  eq(ev.pWin, 0, 'pWin');
+  eq(ev.hasPrizes, false, 'hasPrizes');
+  eq(ev.topPrize, 0, 'topPrize');
 });
 
 check('generated tickets are valid and selection-neutral', () => {
@@ -474,15 +517,25 @@ check('generated tickets are valid and selection-neutral', () => {
   }
 });
 
-check('all-levels generation reports the right odds per level', () => {
-  const levels = generateAllLevels(makeRng(7));
+check('all-levels generation reports the right odds and value per level', () => {
+  const price = DEFAULT_TICKET_PRICE;
+  const prizes = examplePrizes(price);
+  const levels = generateAllLevels(makeRng(7), prizes, price);
   eq(levels.length, 10, 'level count');
   for (const lv of levels) {
     eq(lv.numbers.length, lv.k, `k=${lv.k} ticket size`);
-    assert(Math.abs(lv.pWin - winProbability(lv.k, lv.threshold)) < 1e-12, `k=${lv.k} pWin`);
+    assert(Math.abs(lv.pWin - winProbability(lv.k, prizes)) < 1e-12, `k=${lv.k} pWin`);
     assert(Math.abs(lv.pAll - hyperPmf(lv.k, lv.k)) < 1e-15, `k=${lv.k} pAll`);
     assert(Math.abs(lv.oneIn - 1 / lv.pWin) < 1e-6, `k=${lv.k} oneIn`);
+    const ev = evaluate(lv.k, prizes, price);
+    assert(Math.abs(lv.ev - ev.ev) < 1e-9, `k=${lv.k} EV`);
+    assert(Math.abs(lv.ret - ev.ret) < 1e-12, `k=${lv.k} return`);
   }
+  // The point of the tab: winning most often and returning most are different levels.
+  const mostOften = levels.reduce((a, b) => (b.pWin > a.pWin ? b : a));
+  const bestValue = levels.reduce((a, b) => (b.ret > a.ret ? b : a));
+  out(`       example table: most wins k=${mostOften.k} (${(mostOften.pWin * 100).toFixed(2)}%), ` +
+      `best return k=${bestValue.k} (${(bestValue.ret * 100).toFixed(1)}%)`);
 });
 
 check('theory matches the real Keno history', () => {
@@ -493,6 +546,7 @@ check('theory matches the real Keno history', () => {
   assert(draws.length > 50000, `only ${draws.length} keno draws`);
 
   const rng = makeRng('history');
+  const prizes = examplePrizes(DEFAULT_TICKET_PRICE);
   for (const k of [2, 5, 10]) {
     // Average the observed rate over several independent tickets.
     let totalObs = 0;
@@ -500,10 +554,9 @@ check('theory matches the real Keno history', () => {
     const tickets = 5;
     for (let i = 0; i < tickets; i++) {
       const ticket = generateTicket(k, rng);
-      const t = defaultThreshold(k);
-      const s = scoreAgainstHistory(ticket, draws, t);
+      const s = scoreAgainstHistory(ticket, draws, prizes, DEFAULT_TICKET_PRICE);
       totalObs += s.observedWinRate;
-      totalExp += winProbability(k, t);
+      totalExp += winProbability(k, prizes);
     }
     const obs = totalObs / tickets;
     const exp = totalExp / tickets;
@@ -512,6 +565,25 @@ check('theory matches the real Keno history', () => {
     const z = (obs - exp) / se;
     out(`       k=${k}: observed win rate ${(obs * 100).toFixed(3)}% vs exact ${(exp * 100).toFixed(3)}%  (z = ${z.toFixed(2)})`);
     assert(Math.abs(z) < 4, `k=${k} observed ${obs} vs expected ${exp} (z = ${z.toFixed(2)})`);
+  }
+});
+
+check('money over real draws tracks the expected return', () => {
+  const draws = parseJsonl(readData('keno.jsonl')).filter((r) => r.result.length === 20);
+  const price = DEFAULT_TICKET_PRICE;
+  const prizes = examplePrizes(price);
+  const rng = makeRng('money');
+  for (const k of [4, 8]) {
+    const ticket = generateTicket(k, rng);
+    const s = scoreAgainstHistory(ticket, draws, prizes, price);
+    eq(s.spent, draws.length * price, `k=${k} spend`);
+    eq(s.profit, s.won - s.spent, `k=${k} profit`);
+    // The paid-out column must add up to the total won.
+    const summed = s.rows.reduce((a, r) => a + r.paid, 0);
+    assert(Math.abs(summed - s.won) < 1e-6, `k=${k} payout rows ${summed} vs ${s.won}`);
+    const expectedReturn = evaluate(k, prizes, price).ret;
+    out(`       k=${k}: returned ${(s.actualReturn * 100).toFixed(1)}% over ` +
+        `${fmt(draws.length)} draws, expected ${(expectedReturn * 100).toFixed(1)}%`);
   }
 });
 

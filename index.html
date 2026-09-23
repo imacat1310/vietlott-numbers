@@ -201,55 +201,68 @@
 
   <!-- ============ KENO ============ -->
   <section class="panel" id="panel-keno" role="tabpanel" aria-labelledby="tab-keno">
-    <div class="grid-2">
+    <!-- The level table is the answer, so it gets the full width: ten balls a
+         row will not fit beside a sidebar. -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Every pick level</h2>
+        <span class="sub">one ticket per level, with its exact odds</span>
+      </div>
+      <div id="keno-levels"></div>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px">
       <div class="card">
-        <div class="card-head"><h2>Keno ticket</h2></div>
-
-        <p class="muted" style="font-size:12.5px">
-          A draw takes 20 of the 80 numbers. Play <em>k</em> numbers and the count you
-          match follows a fixed distribution, so the only choice that changes your
-          odds is how many numbers you play.
-        </p>
-
-        <label class="field">
-          <span>Numbers played <span class="hint">(k)</span></span>
-          <span class="range-row">
-            <input type="range" id="keno-k" min="1" max="10" step="1" value="4">
-            <output for="keno-k">4</output>
-          </span>
-        </label>
-
-        <label class="field">
-          <span>A win means matching at least</span>
-          <select id="keno-threshold"></select>
-        </label>
-
-        <label class="field">
-          <span>Seed <span class="hint">(blank = fresh randomness)</span></span>
-          <input type="text" id="keno-seed" placeholder="e.g. 2026">
-        </label>
-
-        <div class="btn-row">
-          <button class="btn primary" id="keno-run">Generate</button>
-          <button class="btn" id="keno-copy">Copy</button>
-        </div>
-
-        <p class="note warn" style="margin-top:14px">
-          <strong>Thresholds are yours to set.</strong> Vietlott's prize table decides
-          which match counts actually pay, and it is not in the draw data. Set the
-          threshold for each level to the real one before comparing levels.
-        </p>
+      <div class="card-head"><h2>Keno ticket</h2></div>
+      
+      <p class="muted" style="font-size:12.5px">
+        A draw takes 20 of the 80 numbers. Play <em>k</em> numbers and the count you
+        match follows a fixed distribution, so the only choice that changes your
+        odds is how many numbers you play.
+      </p>
+      
+      <label class="field">
+        <span>Numbers played <span class="hint">(k)</span></span>
+        <span class="range-row">
+          <input type="range" id="keno-k" min="1" max="10" step="1" value="4">
+          <output for="keno-k">4</output>
+        </span>
+      </label>
+      
+      <label class="field">
+        <span>Ticket price <span class="hint">(VND)</span></span>
+        <input type="number" id="keno-price" value="10000" min="0" step="1000">
+      </label>
+      
+      <label class="field">
+        <span>Seed <span class="hint">(blank = fresh randomness)</span></span>
+        <input type="text" id="keno-seed" placeholder="e.g. 2026">
+      </label>
+      
+      <div class="btn-row">
+        <button class="btn primary" id="keno-run">Generate</button>
+        <button class="btn" id="keno-copy">Copy</button>
+      </div>
+      
+      <h3 style="margin:18px 0 8px">Prize table <span id="keno-prize-k" class="muted"></span></h3>
+      <p class="muted" style="font-size:12px;margin-bottom:8px">
+        What each result pays. Anything above zero counts as a win.
+      </p>
+      <div id="keno-prizes"></div>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn" id="keno-prize-reset">Reset to example</button>
+        <button class="btn" id="keno-prize-clear">Clear level</button>
+      </div>
+      
+      <p class="note warn" style="margin-top:14px">
+        <strong>These are example amounts, not Vietlott's prize table.</strong>
+        The draw data does not carry the prize rules, so the app ships a
+        conventionally shaped placeholder to compute with. Every return and
+        house-edge figure below is only as real as the numbers you put here.
+      </p>
       </div>
 
       <div>
-        <div class="card">
-          <div class="card-head">
-            <h2>Every pick level</h2>
-            <span class="sub">one ticket per level, with its exact odds</span>
-          </div>
-          <div id="keno-levels"></div>
-        </div>
-
         <div class="card">
           <div class="card-head">
             <h2 id="keno-dist-title">Chance of each result</h2>

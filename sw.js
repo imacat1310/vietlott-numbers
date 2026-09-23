@@ -5,7 +5,7 @@
  * clients pick up new code on their next launch.
  */
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `vietlott-${VERSION}`;
 
 // Relative to the service worker's own location, so this works unchanged at a

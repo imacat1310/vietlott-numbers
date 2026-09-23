@@ -38,11 +38,16 @@ each against the real result and pricing the outcome with an editable prize tabl
 "Compare all strategies" runs all eight over the same draws with the same seed.
 
 **Keno** — a ticket for every pick level from 1 to 10 at once, each with its exact
-odds, so you can see which level actually maximises your chance of a win. Picking
-*k* numbers gives a match count distributed as Hypergeometric(80, 20, k), which no
-choice of numbers can alter — the tab says so plainly and shows the full
-distribution, then scores your ticket against 5,000 real draws so the theory can be
-checked rather than believed.
+odds *and* its expected value under an editable prize table. Picking *k* numbers
+gives a match count distributed as Hypergeometric(80, 20, k), which no choice of
+numbers can alter — the tab says so plainly, shows the full distribution with each
+result's contribution to expected value, and scores your ticket against 5,000 real
+draws in money as well as hits.
+
+Which results pay is read off the prize table rather than a "match at least N" rule,
+because real paytables often pay for matching *nothing* at the higher levels. With
+prizes in play the tab reports two answers, since they are rarely the same level:
+which level wins most often, and which returns the most.
 
 **Data & crawler** — crawl status, manual and automatic crawling, JSONL export, and
 the stored draw history.
