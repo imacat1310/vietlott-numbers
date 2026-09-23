@@ -34,6 +34,11 @@ const SHELL = [
   './icons/icon-512.png',
 ];
 
+// data/keno-recent.jsonl is deliberately NOT precached: it is 0.8 MB and only
+// the Keno tab needs it, so paying for it on every install would slow the first
+// load on a phone. The runtime .jsonl handler below caches it the first time
+// that tab is opened, after which the tab works offline too.
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
